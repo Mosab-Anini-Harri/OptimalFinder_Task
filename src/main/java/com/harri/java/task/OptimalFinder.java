@@ -1,5 +1,6 @@
 package com.harri.java.task;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.harri.java.task.models.Brand;
@@ -10,10 +11,7 @@ import com.harri.java.task.utils.ParseUtil;
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 public class OptimalFinder {
 
@@ -27,6 +25,7 @@ public class OptimalFinder {
 
     public static void main(String[] args) {
 
+        // Validate argument
         if (args == null || args.length != 3) {
             System.out.println("Please Enter a valid args");
             System.out.println("a valid args will be like: brand_path repo_path output_path");
@@ -46,39 +45,54 @@ public class OptimalFinder {
             }
         }
 
+        // Read the two files
         BufferedReader reader = null;
         try {
             reader = new BufferedReader(new FileReader(BRAND_INPUT_FILE));
             String line = null;
-            while ((line = reader.readLine()) != null && !"".equals(line.trim())) {
-                Brand b = ParseUtil.parseBrand(line);
+            while ((line = reader.readLine()) != null) {
+                if (!"".equals(line.trim())) {
+                    Brand brand = ParseUtil.parseBrand(line);
 
-                brandsMap.put(b.getId(), b);
+                    brandsMap.put(brand.getId(), brand);
+                }
             }
 
             reader = new BufferedReader(new FileReader(REPOS_INPUT_FILE));
-            while ((line = reader.readLine()) != null && !"".equals(line.trim())) {
-                Repository r = ParseUtil.parseRepo(line);
+            while ((line = reader.readLine()) != null) {
+                if (!"".equals(line.trim())) {
 
-                Brand b = brandsMap.get(r.getBrandId());
+                    Repository repository = ParseUtil.parseRepo(line);
 
-                if (b != null) {
-                    if (r.isSource()) {
-                        if (b.getSourceRepos() == null) {
-                            List<Repository> repos = new ArrayList<Repository>();
-                            repos.add(r);
-                            b.setSourceRepos(repos);
+                    Brand brand = brandsMap.get(repository.getBrandId());
+
+                    if (brand != null) {
+                        if (repository.isSource()) {
+                            if (brand.getSourceRepos() == null) {
+                                List<Repository> repos = new ArrayList<Repository>();
+                                repos.add(repository);
+                                brand.setSourceRepos(repos);
+                            } else {
+                                brand.getSourceRepos().add(repository);
+                            }
                         } else {
-                            b.getSourceRepos().add(r);
+                            if (brand.getDestRepos() == null) {
+                                List<Repository> repos = new ArrayList<Repository>();
+                                repos.add(repository);
+                                brand.setDestRepos(repos);
+                            } else {
+                                brand.getDestRepos().add(repository);
+                            }
                         }
+
+                    /*if (brand.getRepositories() == null) {
+                        List<Repository> repos = new ArrayList<Repository>();
+                        repos.add(repository);
+                        brand.setRepositories(repos);
                     } else {
-                        if (b.getDestRepos() == null) {
-                            List<Repository> repos = new ArrayList<Repository>();
-                            repos.add(r);
-                            b.setDestRepos(repos);
-                        } else {
-                            b.getDestRepos().add(r);
-                        }
+                        brand.getRepositories().add(repository);
+                    }*/
+
                     }
                 }
             }
@@ -87,7 +101,7 @@ public class OptimalFinder {
 
             for (Brand brand :
                     brandsMap.values()) {
-                result.addAll(getOptimalUtilization(brand));
+                result.addAll(getOptimalUtilization_OptimalSolution(brand));
             }
 
             mapper.enable(SerializationFeature.INDENT_OUTPUT);
@@ -108,26 +122,24 @@ public class OptimalFinder {
 
     }
 
-    private static List<OptimalUtilization> getOptimalUtilization(Brand b) {
-        List<Repository> sources = b.getSourceRepos();
-        List<Repository> destinations = b.getDestRepos();
+    private static List<OptimalUtilization> getOptimalUtilization(Brand brand) {
+        List<Repository> sources = brand.getSourceRepos();
+        List<Repository> destinations = brand.getDestRepos();
 
-        Integer maxUtilization = b.getMaxUtilization();
+        Integer maxUtilization = brand.getMaxUtilization();
         Integer optimal = 0;
         List<OptimalUtilization> result = new ArrayList<OptimalUtilization>();
 
-        for (Repository source :
-                sources) {
-            for (Repository dest :
-                    destinations) {
-                Integer totalPayload = source.getPayload() + dest.getPayload();
+        for (Repository source : sources) {
+            for (Repository destination : destinations) {
+                Integer totalPayload = source.getPayload() + destination.getPayload();
                 if (totalPayload <= maxUtilization) {
                     if (totalPayload > optimal) {
                         optimal = totalPayload;
                         result.clear();
-                        addToOptimal(b, result, source, dest);
+                        addToOptimal(brand, result, source, destination);
                     } else if (totalPayload.equals(optimal)) {
-                        addToOptimal(b, result, source, dest);
+                        addToOptimal(brand, result, source, destination);
                     }
                 }
             }
@@ -146,21 +158,52 @@ public class OptimalFinder {
 
 
     private static void printResult(List<OptimalUtilization> result, String outputFilePath) {
-        PrintWriter writer = null;
-        try {
-            writer = new PrintWriter(outputFilePath);
+        try (PrintWriter writer = new PrintWriter(outputFilePath)) {
             for (OptimalUtilization ou :
                     result) {
                 writer.printf("%s,%s,%s\n", ou.getBrandName(), ou.getSourceRepoId(), ou.getDestRepoId());
             }
         } catch (FileNotFoundException e) {
             e.printStackTrace();
-        } finally {
-            if (writer != null) {
-                writer.close();
+        }
+    }
+
+    private static List<OptimalUtilization> getOptimalUtilization_OptimalSolution(Brand brand) throws JsonProcessingException {
+        Collections.sort(brand.getSourceRepos());
+        List<Repository> sources = brand.getSourceRepos();
+        Collections.sort(brand.getDestRepos());
+        List<Repository> destinations = brand.getDestRepos();
+
+        Integer maxUtilization = brand.getMaxUtilization();
+        Integer optimal = 0;
+        List<OptimalUtilization> result = new ArrayList<OptimalUtilization>();
+
+        int l = 0;
+        int r = destinations.size() - 1;
+
+        while (l != sources.size() && r != -1) {
+            int totalLoad = sources.get(l).getPayload() + destinations.get(r).getPayload();
+            if (totalLoad <= maxUtilization) {
+                if (totalLoad > optimal) {
+                    optimal = totalLoad;
+                    result.clear();
+                    addToOptimal(brand, result, sources.get(l), destinations.get(r));
+                } else if (totalLoad == optimal) {
+                    addToOptimal(brand, result, sources.get(l), destinations.get(r));
+                }
             }
+
+            if (totalLoad > maxUtilization)
+                r--;
+            else // Move to larger values
+                l++;
         }
 
+        System.out.println(mapper.writeValueAsString(result));
+
+        System.out.println(l + ":" + r);
+
+        return result;
     }
 
 

@@ -1,6 +1,6 @@
 package com.harri.java.task.models;
 
-public class Repository {
+public class Repository implements Comparable<Repository> {
 
     private Integer id;
     private Integer brandId;
@@ -37,5 +37,10 @@ public class Repository {
 
     public void setPayload(Integer payload) {
         this.payload = payload;
+    }
+
+    @Override
+    public int compareTo(Repository repository) {
+        return this.payload - repository.payload;
     }
 }

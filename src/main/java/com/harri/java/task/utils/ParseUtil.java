@@ -4,6 +4,12 @@ import com.harri.java.task.models.Brand;
 import com.harri.java.task.models.Repository;
 
 public class ParseUtil {
+
+    /**
+     * Parses a comma separated line to brand
+     * @param line
+     * @return
+     */
     public static Brand parseBrand(String line) {
         String[] props = line.split(",");
         Brand b = new Brand();
